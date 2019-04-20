@@ -1,60 +1,62 @@
 import React from 'react'
-import Form from './components/Form'
-import Action from './components/Action'
-import Display from './components/Display'
-import Update from './components/Update'
+import Home from './components/Home'
+import Update from './components/Update';
 
 class App extends React.Component {
     constructor() {
         super()
         this.state = {
-            path: 'home',
-            grocery: [],
-            page: 1,
-            sort: 'asc',
-            action: 'default',
-            select: 'productName',
-            item: null,
-            type: '',
-            keyword: '',
-            order: 'Product Name - Ascending'
+            route: 'home',
+            api: {
+                page: 1,
+                sort: 'asc',
+                select: 'productName',
+                type: '',
+                keyword: ''
+            },
+            homeLocalState: {
+                action: 'display',
+                groceries: []
+            },
+            updateLocalState: {
+                grocery: null
+            }
         }
 
         this.clickHandler = this.clickHandler.bind(this)
         this.selectHandler = this.selectHandler.bind(this)
         this.inputHandler = this.inputHandler.bind(this)
 
-        this.fetchGrocery = this.fetchGrocery.bind(this)
+        this.fetchGroceries = this.fetchGroceries.bind(this)
         this.searchGrocery = this.searchGrocery.bind(this)
-        this.fetchSingleGrocery = this.fetchSingleGrocery.bind(this)
+        this.fetchGrocery = this.fetchGrocery.bind(this)
         this.updateGrocery = this.updateGrocery.bind(this)
     }
 
     componentDidMount() {
+        this.fetchGroceries()
         this.clickHandler()
         this.selectHandler()
-        this.fetchGrocery()
     }
 
     clickHandler() {
         document.body.addEventListener('click', (e) => {
             e.preventDefault()
             if(e.target.tagName === "BUTTON") {
-                let { page } = this.state
+                let nextAPIState = JSON.parse(JSON.stringify(this.state.api))
                 let keyword
 
                 switch(e.target.id) {
-
                     case "prev":
-                        page = (page === 1) ? 1 : --page
-                        this.setState({ page })
-                        this.fetchGrocery()
+                        nextAPIState.page = (nextAPIState.page === 1) ? 1 : --nextAPIState.page
+                        this.setState({ api: nextAPIState })
+                        this.fetchGroceries()
                         break;
 
                     case "next":
-                        page++
-                        this.setState({ page })
-                        this.fetchGrocery()
+                        nextAPIState.page += 1
+                        this.setState({ api: nextAPIState })
+                        this.fetchGroceries()
                         break;
 
                     case "searchBy_brand":
@@ -68,12 +70,11 @@ class App extends React.Component {
                         break;
 
                     case "clear":
-                        this.setState({ action: "default" })
-                        this.fetchGrocery()
+                        this.fetchGroceries()
                         break;
 
                     case "cancel":
-                        this.setState({ path: 'home' }) 
+                        this.setState({ route: 'home' }) 
                         break;
 
                     case "save":
@@ -82,8 +83,8 @@ class App extends React.Component {
 
                     default: 
                         const id = e.target.id.replace('_edit', "")
-                        this.setState({ path: 'update' })
-                        this.fetchSingleGrocery(id)
+                        this.setState({ route: 'update' })
+                        this.fetchGrocery(id)
                 }
             }
         })
@@ -93,13 +94,13 @@ class App extends React.Component {
         document.addEventListener('change', (e) => {
             if(e.target.tagName === "SELECT") {
                 const temp = e.target.value.split(",")
+                const page = 1
                 const sort = temp[0]
                 const select = temp[1]
-                const page = 1
                 const order = e.target.options[e.target.selectedIndex].text
                 
-                this.setState({ page, sort, select, order })
-                this.fetchGrocery()
+                this.setState({ api: { page, sort, select } })
+                this.fetchGroceries()
             }
         })
     }
@@ -107,38 +108,49 @@ class App extends React.Component {
     inputHandler(e) {
         const elem = e.target.id
         const value = e.target.value
-        const item = this.state.item
+        const grocery = this.state.updateLocalState.grocery
 
-        item[elem] = value
-        this.setState({ item })
+        grocery[elem] = value
+        this.setState({ updateLocalState: { grocery } })
     }
 
-    fetchGrocery() {
-        const { page, sort, select } = this.state
+    fetchGroceries() {
+        const { page, sort, select } = this.state.api
 
         fetch(`grocery?page=${page}&sort=${sort}&select=${select}`)
         .then(res => res.json())
         .then(res => {
             if(res.success) {
-                this.setState({ grocery: res.result })
+                const nextState = JSON.parse(JSON.stringify(this.state.homeLocalState))
+                nextState.action = "display"
+                nextState.groceries = res.result
+                this.setState({ homeLocalState: nextState })
             }else {
                 alert(res.message)
-                const page = --this.state.page
-                this.setState({ page })
+                const APIState = JSON.parse(JSON.stringify(this.state.api))
+                APIState.page -= 1
+                this.setState({ api: APIState })
             }
         })
         .catch(err => { throw err })
     }
 
     searchGrocery(type, keyword) {
-
         if(keyword.length) {
             fetch(`grocery/search?type=${type}&keyword=${keyword}`)
             .then(res => res.json())
             .then(res => {
                 if(res.result) {
-                    const action = 'search'
-                    this.setState({ type, keyword, action ,grocery: res.result })
+                    const nextHomeState = JSON.parse(JSON.stringify(this.state.homeLocalState))
+                    nextHomeState.action = "search"
+                    nextHomeState.groceries = res.result
+
+                    const APIState = JSON.parse(JSON.stringify(this.state.api))
+                    APIState.type = type
+                    APIState.keyword = keyword
+
+                    this.setState({ homeLocalState: nextHomeState })
+                    this.setState({ api: APIState })
                 }else {
                     alert(res.message)
                 }
@@ -147,40 +159,42 @@ class App extends React.Component {
         }
     }
 
-    fetchSingleGrocery(id) {
+    fetchGrocery(id) {
         fetch(`grocery/${id}`)
         .then(res => res.json())
         .then(res => {
             if(res.success) {
-                this.setState({ item: res.result })
+                this.setState({ updateLocalState: { grocery: res.result } })
             }
         })
         .catch(err => { throw err })
     }
 
     updateGrocery() {
-        const { id } = this.state.item
-
+        const { id } = this.state.updateLocalState.grocery
         fetch(`grocery/${id}`, {
             method: 'PUT',
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify(this.state.item)
+            body: JSON.stringify(this.state.updateLocalState.grocery)
         })
         .then(res => res.json())
         .then(res => {
             if(res.success) {
-                const { action } = this.state
+                const { action } = this.state.homeLocalState
 
-                if(action === "default") {
-                    this.fetchGrocery()
-                }else if(action === "search") {
-                    const { type, keyword } = this.state
-                    this.searchGrocery(type, keyword)
+                switch(action) {
+                    case 'display':
+                        this.fetchGroceries()
+                        break
+                    case 'search':
+                        const { type, keyword } = this.state.api 
+                        this.searchGrocery(type, keyword)
+                        break
                 }
 
-                this.setState({ path: 'home' })
+                this.setState({ route: 'home' })
                 alert(res.message)
             }else {
                 let message = res.message
@@ -195,40 +209,26 @@ class App extends React.Component {
     }
 
     render() {
-        const grocery = this.state.grocery
-        const action = this.state.action
-        const path = this.state.path
-        const item = this.state.item
-        const order = this.state.order
-        let screen
+        const route = this.state.route
+        let pageToRender
 
-        const home = (
-            <div>
-                <div className="row">
-                    <Form />
-                </div>
-                <br />
-                <div className="row">
-                    <Action action={action} order={order} />
-                </div>
-                <div className="row">
-                    <Display grocery={grocery} />
-                </div>
-            </div>
-        )
-
-        if(path === "home") {
-            screen = home
-        }else if(path === "update"){
-            screen = <Update item={item} inputChange={this.inputHandler} />
+        switch(route) {
+            case 'home':
+                pageToRender = <Home 
+                                localState={this.state.homeLocalState} 
+                                />
+                break
+            case 'update':
+                pageToRender = <Update 
+                                item={this.state.updateLocalState.grocery} 
+                                inputChange={this.inputHandler}
+                                />
+                break
         }
 
         return (
             <div className="container">
-                <div>
-                    <h1>Grocery App</h1>
-                </div>
-                { screen }
+                { pageToRender }
             </div>
         )
     }
